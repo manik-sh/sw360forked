@@ -25,7 +25,7 @@ stages:          # List of stages for jobs, and their order of execution
 sync:
   stage: sync
   script:
-    - git remote add upstream https://github.com/eclipse-sw360/sw360.git
+    - git remote add upstream https://github.com/FarooqAftab/sw360.git
     - git fetch upstream
     - git merge upstream/main --no-commit --no-ff  # Merge changes from GitHub without committing
     - git commit -m "Sync changes from GitHub"  # Commit changes
