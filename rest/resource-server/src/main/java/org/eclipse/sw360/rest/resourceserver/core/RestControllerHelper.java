@@ -63,6 +63,7 @@ import org.eclipse.sw360.rest.resourceserver.license.Sw360LicenseService;
 import org.eclipse.sw360.rest.resourceserver.moderationrequest.EmbeddedModerationRequest;
 import org.eclipse.sw360.rest.resourceserver.moderationrequest.ModerationRequestController;
 import org.eclipse.sw360.rest.resourceserver.moderationrequest.Sw360ModerationRequestService;
+import org.eclipse.sw360.rest.resourceserver.obligation.Sw360ObligationService;
 import org.eclipse.sw360.rest.resourceserver.project.EmbeddedProject;
 import org.eclipse.sw360.rest.resourceserver.vulnerability.VulnerabilityController;
 import org.eclipse.sw360.rest.resourceserver.project.EmbeddedProjectDTO;
@@ -140,6 +141,9 @@ public class RestControllerHelper<T> {
     private final Sw360LicenseService licenseService;
 
     @NonNull
+    private final Sw360ObligationService obligationService;
+
+    @NonNull
     private final ResourceComparatorGenerator<T> resourceComparatorGenerator = new ResourceComparatorGenerator<>();
 
     @NonNull
@@ -155,6 +159,9 @@ public class RestControllerHelper<T> {
     private static final double MIN_CVSS = 0;
     private static final double MAX_CVSS = 10;
     public static final String PAGINATION_PARAM_PAGE_ENTRIES = "page_entries";
+
+    @NonNull
+    private final com.fasterxml.jackson.databind.Module sw360Module;
     public static final ImmutableSet<ProjectReleaseRelationship._Fields> SET_OF_PROJECTRELEASERELATION_FIELDS_TO_IGNORE = ImmutableSet
             .of(ProjectReleaseRelationship._Fields.CREATED_ON, ProjectReleaseRelationship._Fields.CREATED_BY);
 
@@ -428,6 +435,21 @@ public class RestControllerHelper<T> {
         }
     }
 
+    public Release convertToEmbeddedReleaseAttachments(Release release) {
+        Release embeddedRelease = new Release();
+        embeddedRelease.setId(release.getId());
+        embeddedRelease.setName(release.getName());
+        embeddedRelease.setVersion(release.getVersion());
+        embeddedRelease.setAttachments(release.getAttachments());
+        embeddedRelease.setType(null);
+        return embeddedRelease;
+    }
+
+    public void addEmbeddedProjectAttachmentUsage(HalResource halResource, List<EntityModel<Release>> releases, List<Map<String, Object>> attachmentUsageMap) {
+        halResource.addEmbeddedResource("sw360:release", releases);
+        halResource.addEmbeddedResource("sw360:attachmentUsages", attachmentUsageMap);
+    }
+
     public HalResource<Vendor> addEmbeddedVendor(String vendorFullName) {
         Vendor embeddedVendor = convertToEmbeddedVendor(vendorFullName);
         HalResource<Vendor> halVendor = new HalResource<>(embeddedVendor);
@@ -528,12 +550,10 @@ public class RestControllerHelper<T> {
     }
 
     public HalResource<Release> addEmbeddedReleaseLinks(Release release) {
-        final Release embeddedRelease = convertToEmbeddedLinkedRelease(release);
-	    final HalResource<Release> releaseResource = new HalResource<>(embeddedRelease);
-	    Link releaseLink = linkTo(ReleaseController.class)
-                .slash("api/releases/" + embeddedRelease.getId()).withSelfRel();
-	    releaseResource.add(releaseLink);
-
+        final HalResource<Release> releaseResource = new HalResource<>(release);
+        Link releaseLink = linkTo(ReleaseController.class)
+                .slash("api/releases/" + release.getId()).withSelfRel();
+        releaseResource.add(releaseLink);
         return releaseResource;
     }
 
@@ -605,6 +625,32 @@ public class RestControllerHelper<T> {
         return packageToUpdate;
     }
 
+    public User updateUserProfile(User userToUpdate, Map<String, Object> requestBodyUser, ImmutableSet<User._Fields> setOfUserProfileFields) {
+        for (User._Fields field : setOfUserProfileFields) {
+            Object fieldValue = requestBodyUser.get(field.getFieldName());
+            if (fieldValue != null) {
+                switch (field) {
+                    case NOTIFICATION_PREFERENCES:
+                        Object wantNotification = requestBodyUser.get(User._Fields.WANTS_MAIL_NOTIFICATION.getFieldName());
+                        if (wantNotification == null) {
+                            if (userToUpdate.isWantsMailNotification()) {
+                                userToUpdate.setFieldValue(field, fieldValue);
+                            }
+                        } else {
+                            if (Boolean.TRUE.equals(wantNotification)) {
+                                userToUpdate.setFieldValue(field, fieldValue);
+                            }
+                        }
+                        break;
+                    default:
+                        userToUpdate.setFieldValue(field, fieldValue);
+                        break;
+                }
+            }
+        }
+        return userToUpdate;
+    }
+
     public Component convertToComponent(ComponentDTO componentDTO) {
         Component component = new Component();
 
@@ -652,6 +698,17 @@ public class RestControllerHelper<T> {
         return releaseToUpdate;
     }
 
+    public License convertLicenseFromRequest(Map<String, Object> reqBodyMap, License licenseUpdate) {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        mapper.registerModule(sw360Module);
+        License licenseRequestBody = mapper.convertValue(reqBodyMap, License.class);
+        if (null == reqBodyMap.get("checked") && !licenseUpdate.isChecked()) {
+            licenseRequestBody.setChecked(false);
+        }
+        return licenseRequestBody;
+    }
+
     private void isLicenseValid(Set<String> licenses) {
         List <String> licenseIncorrect = new ArrayList<>();
         if (CommonUtils.isNotEmpty(licenses)) {
@@ -665,6 +722,38 @@ public class RestControllerHelper<T> {
         }
         if (!licenseIncorrect.isEmpty()) {
             throw new HttpMessageNotReadableException("License with ids " + licenseIncorrect + " does not exist in SW360 database.");
+        }
+    }
+
+    public License mapLicenseRequestToLicense(License licenseRequestBody, License licenseUpdate) {
+        for (License._Fields field : License._Fields.values()) {
+            Object fieldValue = licenseRequestBody.getFieldValue(field);
+            if (fieldValue != null) {
+                switch (field) {
+                    case OBLIGATION_DATABASE_IDS:
+                        isObligationValid(licenseRequestBody.getObligationDatabaseIds());
+                        break;
+                    default:
+                }
+                licenseUpdate.setFieldValue(field, fieldValue);
+            }
+        }
+        return licenseUpdate;
+    }
+
+    private void isObligationValid(Set<String> obligationIds) {
+        List <String> obligationIncorrect = new ArrayList<>();
+        if (CommonUtils.isNotEmpty(obligationIds)) {
+            for (String obligationId : obligationIds) {
+                try {
+                    obligationService.getObligationById(obligationId);
+                } catch (Exception e) {
+                    obligationIncorrect.add(obligationId);
+                }
+            }
+        }
+        if (!obligationIncorrect.isEmpty()) {
+            throw new HttpMessageNotReadableException("Obligation with ids " + obligationIncorrect + " does not exist in SW360 database.");
         }
     }
 
@@ -692,6 +781,7 @@ public class RestControllerHelper<T> {
         embeddedProject.setVersion(project.getVersion());
         embeddedProject.setVisbility(project.getVisbility());
         embeddedProject.setBusinessUnit(project.getBusinessUnit());
+        embeddedProject.setEnableSvm(project.isEnableSvm());
         embeddedProject.setType(null);
         return embeddedProject;
     }
@@ -706,6 +796,8 @@ public class RestControllerHelper<T> {
         embeddedProject.setVersion(project.getVersion());
         embeddedProject.setReleaseIdToUsage(project.getReleaseIdToUsage());
         embeddedProject.setLinkedProjects(project.getLinkedProjects());
+        embeddedProject.setEnableSvm(project.isEnableSvm());
+        embeddedProject.setEnableVulnerabilitiesDisplay(project.isEnableVulnerabilitiesDisplay());
         embeddedProject.setType(null);
         return embeddedProject;
     }
@@ -842,6 +934,8 @@ public class RestControllerHelper<T> {
         embeddedUser.setGivenname(user.getGivenname());
         embeddedUser.setLastname(user.getLastname());
         embeddedUser.setDepartment(user.getDepartment());
+        embeddedUser.setUserGroup(user.getUserGroup());
+        embeddedUser.setSecondaryDepartmentsAndRoles(user.getSecondaryDepartmentsAndRoles());
         embeddedUser.setType(null);
         return embeddedUser;
     }
@@ -870,7 +964,10 @@ public class RestControllerHelper<T> {
     public Obligation convertToEmbeddedObligation(Obligation obligation) {
         Obligation embeddedObligation = new Obligation();
         embeddedObligation.setTitle(obligation.getTitle());
+        embeddedObligation.setObligationType(obligation.getObligationType());
         embeddedObligation.setId(obligation.getId());
+        embeddedObligation.setWhitelist(obligation.getWhitelist());
+        embeddedObligation.setText(obligation.getText());
         embeddedObligation.setType(null);
         return embeddedObligation;
     }
@@ -1310,5 +1407,27 @@ public class RestControllerHelper<T> {
             }
             addEmbeddedFields("sw360:cotsDetail", cotsDetailsHalResource, halResource);
         }
+    }
+
+    public void addEmbeddedProjectResponsible(HalResource<Project> halResource, String projectResponsible) {
+        User sw360User = getUserByEmail(projectResponsible);
+        if(sw360User!=null) {
+            addEmbeddedUser(halResource, sw360User, "projectResponsible");
+        }
+    }
+
+    public void addEmbeddedSecurityResponsibles (HalResource<Project> halResource, Set<String> securityResponsibles) {
+        for (String securityResponsible : securityResponsibles) {
+            User sw360User = getUserByEmail(securityResponsible);
+            if(sw360User!=null) {
+                addEmbeddedUser(halResource, sw360User, "securityResponsibles");
+            }
+        }
+    }
+
+    public void addEmbeddedClearingTeam(HalResource<Project> userHalResource, String clearingTeam, String resource) {
+        User sw360User = getUserByEmail(clearingTeam);
+        if(sw360User!=null)
+            addEmbeddedUser(userHalResource, sw360User, resource);
     }
 }
