@@ -237,7 +237,6 @@ Liferay by default for security reasons do not allow redirect for unknown ips/do
 
 As admin, go to Control Panel -> Instance Settings -> Content Data -> Pages
 
-### testing the mirror of gitlab push to github
 
 Decide to use:
 
