@@ -29,6 +29,7 @@ typedef sw360.ObligationStatus ObligationStatus
 typedef sw360.SW360Exception SW360Exception
 typedef sw360.ClearingRequestState ClearingState
 typedef sw360.ClearingRequestPriority ClearingPriority
+typedef sw360.ClearingRequestType ClearingType
 typedef sw360.Comment Comment
 typedef sw360.PaginationData PaginationData
 typedef components.Release Release
@@ -245,7 +246,8 @@ struct ClearingRequest {
     16: optional list<Comment> comments,
     17: optional i64 modifiedOn,
     18: optional list<i64> reOpenOn,
-    19: optional ClearingPriority priority
+    19: optional ClearingPriority priority,
+    20: optional ClearingType clearingType
 }
 
 struct ProjectDTO{
@@ -524,6 +526,8 @@ service ProjectService {
      * Visibility of any of the projects in the tree for the given user is currently not considered.
      */
     list<Project> fillClearingStateSummaryIncludingSubprojects(1: list<Project> projects, 2: User user);
+    
+    Project fillClearingStateSummaryIncludingSubprojectsForSingleProject(1: Project project, 2: User user);
 
     /**
     * export all projects to SVM to create/update monitoring lists
@@ -690,4 +694,10 @@ service ProjectService {
      */
     list<ProjectLink> getLinkedProjectsOfProjectWithoutReleases(1: Project project, 2: bool deep, 3: User user);
 
+    /**
+     * get a list of project links of the project that matches the id `id`
+     * with each project get all release in dependency network
+     * is equivalent to `getLinkedProjectsOfProject(getProjectById(id, user))`
+     */
+    list<ProjectLink> getLinkedProjectsOfProjectWithAllReleases(1: Project project, 2: bool deep, 3: User user);
 }

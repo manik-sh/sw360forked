@@ -128,6 +128,12 @@ public class Sw360ProjectService implements AwareOfRestServices<Project> {
         }
     }
 
+    public String getCyclicLinkedProjectPath(Project project, User user) throws TException {
+        ProjectService.Iface sw360ProjectClient = getThriftProjectClient();
+        String cyclicLinkedProjectPath = sw360ProjectClient.getCyclicLinkedProjectPath(project, user);
+        return cyclicLinkedProjectPath;
+    }
+
     public Set<Project> searchLinkingProjects(String projectId, User sw360User) throws TException {
         ProjectService.Iface sw360ProjectClient = getThriftProjectClient();
         return sw360ProjectClient.searchLinkingProjects(projectId, sw360User);
@@ -223,6 +229,11 @@ public class Sw360ProjectService implements AwareOfRestServices<Project> {
             }
         }
     }
+    
+    public Project getClearingInfo(Project sw360Project, User sw360User) throws TException {
+    	ProjectService.Iface sw360ProjectClient = getThriftProjectClient();
+    	return sw360ProjectClient.fillClearingStateSummaryIncludingSubprojectsForSingleProject(sw360Project, sw360User);
+    }
 
     public List<Project> searchProjectByName(String name, User sw360User) throws TException {
         final ProjectService.Iface sw360ProjectClient = getThriftProjectClient();
@@ -265,14 +276,12 @@ public class Sw360ProjectService implements AwareOfRestServices<Project> {
         projectIdsInBranch.add(sw360Project.getId());
         Map<String, ProjectProjectRelationship> linkedProjects = sw360Project.getLinkedProjects();
 		List<String> keys = new ArrayList<>(linkedProjects.keySet());
-		System.out.println("keys " + keys.size());
         if (keys != null) {
         	keys.forEach(linkedProjectId -> wrapTException(() -> {
                 if (projectIdsInBranch.contains(linkedProjectId)) {
                     return;
                 }
                 Project linkedProject = getProjectForUserById(linkedProjectId, sw360User);
-                System.out.println("project " + linkedProject);
                 Project embeddedLinkedProject = rch.convertToEmbeddedLinkedProject(linkedProject);
                 HalResource<Project> halLinkedProject = new HalResource<>(embeddedLinkedProject);
                 Link projectLink = linkTo(ProjectController.class)

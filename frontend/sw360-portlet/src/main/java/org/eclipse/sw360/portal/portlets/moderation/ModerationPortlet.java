@@ -450,7 +450,9 @@ public class ModerationPortlet extends FossologyAwarePortlet {
                     sessionMessage = LanguageUtil.get(resourceBundle,"you.have.postponed.the.previous.moderation.request");
                 } else if (ACTION_RENDER_NEXT_AFTER_UNSUBSCRIBE.equals(action)) {
                     sessionMessage = LanguageUtil.get(resourceBundle,"you.are.removed.from.the.list.of.moderators.for.the.previous.moderation.request");
-                } else {
+                }  else if (LAST_MODERATOR.equals(action)) {
+                    sessionMessage = LanguageUtil.get(resourceBundle,"you.are.the.last.moderator.for.this.request.you.are.not.allowed.to.unsubscribe");
+                }  else {
                    throw new PortletException("Unknown action");
                 }
 
@@ -655,6 +657,12 @@ public class ModerationPortlet extends FossologyAwarePortlet {
             return;
         }
 
+        if (LAST_MODERATOR.equals(request.getParameter(ACTION))) {
+            SessionMessages.add(request, "request_processed", sessionMessage);
+            renderStandardView(request, response);
+            return;
+        }
+
         List<ModerationRequest> requestsByModerator = client.getRequestsByModerator(user);
         List<ModerationRequest> openModerationRequests = requestsByModerator
                 .stream()
@@ -854,6 +862,8 @@ public class ModerationPortlet extends FossologyAwarePortlet {
 
         prepareComponent(request, user, actual_component);
         request.setAttribute(PortalConstants.ACTUAL_COMPONENT, actual_component);
+        request.setAttribute(BULK_RELEASE_DELETING, IS_BULK_RELEASE_DELETING_ENABLED);
+        request.setAttribute(IS_USER_ADMIN, PermissionUtils.isUserAtLeast(UserGroup.ADMIN, user));
         if (moderationRequest.isRequestDocumentDelete()) {
             include("/html/moderation/components/delete.jsp", request, response);
         } else {
@@ -910,6 +920,8 @@ public class ModerationPortlet extends FossologyAwarePortlet {
 
         prepareRelease(request, user, actual_release);
         request.setAttribute(PortalConstants.ACTUAL_RELEASE, actual_release);
+        request.setAttribute(BULK_RELEASE_DELETING, IS_BULK_RELEASE_DELETING_ENABLED);
+        request.setAttribute(IS_USER_ADMIN, PermissionUtils.isUserAtLeast(UserGroup.ADMIN, user));
         if (requestDocumentDelete) {
             include("/html/moderation/releases/delete.jsp", request, response);
         } else {

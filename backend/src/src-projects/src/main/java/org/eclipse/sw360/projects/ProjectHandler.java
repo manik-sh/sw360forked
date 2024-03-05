@@ -390,6 +390,12 @@ public class ProjectHandler implements ProjectService.Iface {
             throws TException {
         return handler.fillClearingStateSummaryIncludingSubprojects(projects, user);
     }
+    
+    @Override
+    public Project fillClearingStateSummaryIncludingSubprojectsForSingleProject(Project project, User user)
+            throws TException {
+        return handler.fillClearingStateSummaryIncludingSubprojectsForSingleProject(project, user);
+    }
 
     @Override
     public List<ReleaseClearingStatusData> getReleaseClearingStatuses(String projectId, User user) throws SW360Exception {
@@ -562,4 +568,11 @@ public class ProjectHandler implements ProjectService.Iface {
         assertNotNull(project);
         return handler.getLinkedProjectsWithoutReleases(project, deep, user);
     }
+
+    @Override
+    public List<ProjectLink> getLinkedProjectsOfProjectWithAllReleases(Project project, boolean deep, User user) throws TException {
+        assertNotNull(project);
+        return handler.getLinkedProjectsWithAllReleases(project, deep, user);
+    }
+
 }

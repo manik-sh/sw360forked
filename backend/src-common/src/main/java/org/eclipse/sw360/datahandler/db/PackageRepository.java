@@ -48,6 +48,7 @@ public class PackageRepository extends DatabaseRepositoryCloudantClient<Package>
     private static final String BY_CREATED_ON = "function(doc) { if (doc.type == 'package') { emit(doc.createdOn, doc._id) } }";
     private static final String BY_RELEASE_ID = "function(doc) { if (doc.type == 'package') { emit(doc.releaseId, doc._id); } }";
     private static final String BY_LICENSE_IDS = "function(doc) { if (doc.type == 'package') { if (doc.licenseIds) { emit(doc.licenseIds.join(), doc._id); } else { emit('', doc._id); } } }";
+    private static final String BY_PURL = "function(doc) { if (doc.type == 'package') { emit(doc.purl.trim(), doc._id) } }";
 
     public PackageRepository(DatabaseConnectorCloudant db) {
         super(db, Package.class);
@@ -61,6 +62,7 @@ public class PackageRepository extends DatabaseRepositoryCloudantClient<Package>
         views.put("byCreatedOn", createMapReduce(BY_CREATED_ON, null));
         views.put("byReleaseId", createMapReduce(BY_RELEASE_ID, null));
         views.put("byLicenseIds", createMapReduce(BY_LICENSE_IDS, null));
+        views.put("byPurl", createMapReduce(BY_PURL, null));
         initStandardDesignDocument(views, db);
     }
 
@@ -103,6 +105,12 @@ public class PackageRepository extends DatabaseRepositoryCloudantClient<Package>
                 .filter(r -> isNullOrEmpty(version) ? isNullOrEmpty(r.getVersion()) : version.equalsIgnoreCase(r.getVersion()))
                 .collect(Collectors.toList());
         return releasesMatchingNameAndVersion;
+    }
+
+    public List<Package> searchByPurl(String purl) {
+        List<org.eclipse.sw360.datahandler.thrift.packages.Package> packagesMatchingPurl
+                = new ArrayList<org.eclipse.sw360.datahandler.thrift.packages.Package>(queryView("byPurl", purl));
+        return packagesMatchingPurl;
     }
 
     public Map<PaginationData, List<Package>> getPackagesWithPagination(PaginationData pageData) {
